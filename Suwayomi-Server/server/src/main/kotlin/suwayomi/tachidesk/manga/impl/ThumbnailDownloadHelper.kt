@@ -8,6 +8,7 @@ object ThumbnailDownloadHelper {
     fun getImage(mangaId: Int): Pair<InputStream, String> {
         return if (hasCustomThumbnail(mangaId)) {
             customProvider(mangaId).getCustomThumbnail()
+            customProvider(mangaId).getCustomThumbnail()
         } else {
             defaultProvider(mangaId).getImage().execute()
         }
@@ -21,6 +22,15 @@ object ThumbnailDownloadHelper {
     }
 
     suspend fun download(mangaId: Int): Boolean = defaultProvider(mangaId).download().execute()
+    /**
+     * Gets the custom thumbnail for a manga.
+     * @param mangaId The ID of the manga.
+     * @return A Pair containing the InputStream of the thumbnail and its MIME type.
+     */
+    fun getCustomThumbnail(mangaId: Int): Pair<InputStream, String> {
+        return customProvider(mangaId).getCustomThumbnail()
+    }
+
 
     // Custom thumbnail operations
     fun saveCustomThumbnail(mangaId: Int, inputStream: InputStream) {

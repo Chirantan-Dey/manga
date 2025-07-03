@@ -139,7 +139,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # Build the WebUI for production
-yarn build
+yarn --max-old-space-size=4096 build
 if [ $? -ne 0 ]; then
     echo "Error: Suwayomi-WebUI build failed! Exiting."
     exit 1

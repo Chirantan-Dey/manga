@@ -5,9 +5,10 @@ import PopupState, { bindTrigger, bindMenu } from 'material-ui-popup-state';
 import { useLongPress } from 'use-long-press';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import { MangaType } from '@/lib/graphql/generated/graphql';
 
 interface MangaThumbnailProps {
-  mangaId: Manga['id'];
+  mangaId: MangaType['id'];
   thumbnailUrl: string;
   onThumbnailChange?: () => void;
 }
@@ -32,10 +33,7 @@ const MangaThumbnail: React.FC<MangaThumbnailProps> = ({
   });
 
   const bindLongPress = useLongPress(
-    (event, meta) => {
-      if (meta.context) {
-        meta.context(event);
-      }
+    (_, meta) => {
     },
     { threshold: 500, captureEvent: true }
   );
