@@ -170,7 +170,7 @@ echo "WebUI files copied to $CUSTOM_WEBUI_TARGET_DIR"
 
 # --- Determine WebUI Access Link ---
 SERVER_IP="localhost"
-SERVER_PORT="8080"
+SERVER_PORT="4567"
 
 if [ -f "$SERVER_CONF_FILE" ]; then
     # Extract IP and Port from server.conf
@@ -199,7 +199,7 @@ echo "Access the WebUI at: http://${SERVER_IP}:${SERVER_PORT}"
 echo "" # Newline for readability
 
 # Run the server, setting the data root and WebUI flavor via system properties
-xvfb-run java -Djava.awt.headless=true \
+xvfb-run --auto-servernum --server-args="-screen 0 1024x768x24" java -Djava.awt.headless=true \
              -Dcef.headless=true \
              -Dsuwayomi.tachidesk.config.server.rootDir="$CUSTOM_DATA_ROOT" \
              -Dsuwayomi.tachidesk.config.server.webUIFlavor=CUSTOM \
