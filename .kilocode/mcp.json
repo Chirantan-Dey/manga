@@ -16,6 +16,9 @@
         "-y",
         "@modelcontextprotocol/server-filesystem",
         "/workspaces/manga"
+      ],
+      "alwaysAllow": [
+        "read_file"
       ]
     },
     "sequentialthinking": {
