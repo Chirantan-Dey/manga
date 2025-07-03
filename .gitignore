@@ -1,6 +1,7 @@
 # Ignore IntelliJ/IDEA index files
 .idx/
-
+.webui_1/
+.webui_2/
 .komikku/
 suwayomi-data/
 .sdkmanrc
