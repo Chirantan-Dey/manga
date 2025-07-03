@@ -61,25 +61,22 @@ import java.io.InputStream
 import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.max
 import kotlin.time.Duration.Companion.milliseconds
 import suwayomi.tachidesk.manga.impl.track.Track as Tracker
-
-enum class RestoreMode {
-    NEW,
-    EXISTING,
-}
 
 object ProtoBackupImport : ProtoBackupBase() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val logger = KotlinLogging.logger {}
 
-    private var restoreAmount = 0
-
-    private val errors = mutableListOf<Pair<Date, String>>()
-
     private val backupMutex = Mutex()
+
+    enum class RestoreMode {
+        NEW,
+        EXISTING,
+    }
 
     sealed class BackupRestoreState {
         data object Idle : BackupRestoreState()
@@ -110,7 +107,7 @@ object ProtoBackupImport : ProtoBackupBase() {
         ) : BackupRestoreState()
     }
 
-    private val backupRestoreIdToState = mutableMapOf<String, BackupRestoreState>()
+    private val backupRestoreIdToState = ConcurrentHashMap<String, BackupRestoreState>()
 
     val notifyFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = DROP_OLDEST)
 
@@ -199,7 +196,7 @@ object ProtoBackupImport : ProtoBackupBase() {
         val restoreMeta = 1
         val restoreSettings = 1
         val getRestoreAmount = { size: Int -> size + restoreCategories + restoreMeta + restoreSettings }
-        restoreAmount = getRestoreAmount(backup.backupManga.size)
+        val restoreAmount = getRestoreAmount(backup.backupManga.size)
 
         updateRestoreState(id, BackupRestoreState.RestoringCategories(restoreCategories, restoreAmount))
 
@@ -219,7 +216,9 @@ object ProtoBackupImport : ProtoBackupBase() {
         restoreServerSettings(backup.serverSettings)
 
         // Store source mapping for error messages
-        sourceMapping = backup.getSourceMap()
+        val sourceMapping = backup.getSourceMap()
+
+        val errors = mutableListOf<Pair<Date, String>>()
 
         // Restore individual manga
         backup.backupManga.forEachIndexed { index, manga ->
@@ -235,6 +234,8 @@ object ProtoBackupImport : ProtoBackupBase() {
             restoreManga(
                 backupManga = manga,
                 categoryMapping = categoryMapping,
+                sourceMapping = sourceMapping,
+                errors = errors,
             )
         }
 
@@ -277,6 +278,8 @@ object ProtoBackupImport : ProtoBackupBase() {
     private fun restoreManga(
         backupManga: BackupManga,
         categoryMapping: Map<Int, Int>,
+        sourceMapping: Map<Long, String>,
+        errors: MutableList<Pair<Date, String>>,
     ) {
         val chapters = backupManga.chapters
         val categories = backupManga.categories
@@ -292,7 +295,6 @@ object ProtoBackupImport : ProtoBackupBase() {
         }
     }
 
-    @Suppress("UNUSED_PARAMETER") // TODO: remove
     private fun restoreMangaData(
         manga: BackupManga,
         chapters: List<BackupChapter>,
@@ -366,7 +368,7 @@ object ProtoBackupImport : ProtoBackupBase() {
                 }
 
                 // merge chapter data
-                restoreMangaChapterData(mangaId, restoreMode, chapters)
+                restoreMangaChapterData(mangaId, restoreMode, chapters, history)
 
                 // merge categories
                 restoreMangaCategoryData(mangaId, categoryIds)
@@ -402,8 +404,10 @@ object ProtoBackupImport : ProtoBackupBase() {
         mangaId: Int,
         restoreMode: RestoreMode,
         chapters: List<BackupChapter>,
+        history: List<BackupHistory>,
     ) = dbTransaction {
         val (chaptersToInsert, chaptersToUpdateToDbChapter) = getMangaChapterToRestoreInfo(mangaId, restoreMode, chapters)
+        val historyByChapter = history.groupBy({ it.url }, { it.lastRead })
 
         val insertedChapterIds =
             ChapterTable
@@ -426,6 +430,8 @@ object ProtoBackupImport : ProtoBackupBase() {
                     this[ChapterTable.isBookmarked] = chapter.bookmark
 
                     this[ChapterTable.fetchedAt] = chapter.dateFetch.milliseconds.inWholeSeconds
+
+                    this[ChapterTable.lastReadAt] = historyByChapter[chapter.url]?.maxOrNull()?.milliseconds?.inWholeSeconds ?: 0
                 }.map { it[ChapterTable.id].value }
 
         if (chaptersToUpdateToDbChapter.isNotEmpty()) {
@@ -436,6 +442,9 @@ object ProtoBackupImport : ProtoBackupBase() {
                     this[ChapterTable.lastPageRead] =
                         max(backupChapter.lastPageRead, dbChapter[ChapterTable.lastPageRead]).coerceAtLeast(0)
                     this[ChapterTable.isBookmarked] = backupChapter.bookmark || dbChapter[ChapterTable.isBookmarked]
+                    this[ChapterTable.lastReadAt] =
+                        (historyByChapter[backupChapter.url]?.maxOrNull()?.milliseconds?.inWholeSeconds ?: 0)
+                            .coerceAtLeast(dbChapter[ChapterTable.lastReadAt])
                 }
                 execute(this@dbTransaction)
             }
